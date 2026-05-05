@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}LanPaste{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css">
+</head>
+<body>
+<header>
+  <a class="brand" href="{{ url_for('index') }}">LanPaste</a>
+  <span class="tagline">local pastebin · LAN only</span>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer>
+  <span>POST /api/paste for CLI use · max 1 MiB · served on this LAN</span>
+</footer>
+</body>
+</html>

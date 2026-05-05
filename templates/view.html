@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ paste['title'] or paste['id'] }} · LanPaste{% endblock %}
+{% block content %}
+<article class="paste">
+  <header class="paste-head">
+    <h1>{{ paste['title'] or paste['id'] }}</h1>
+    <div class="meta">
+      <span>id: <code>{{ paste['id'] }}</code></span>
+      <span>lang: {{ paste['language'] }}</span>
+      <span>created: {{ paste['created_at'][:19].replace('T',' ') }} UTC</span>
+      {% if paste['expires_at'] %}<span>expires: {{ paste['expires_at'][:19].replace('T',' ') }} UTC</span>{% else %}<span>no expiry</span>{% endif %}
+    </div>
+    <div class="paste-actions">
+      <button type="button" id="copy-btn" data-target="paste-content">Copy</button>
+      <a href="{{ url_for('raw_paste', paste_id=paste['id']) }}">Raw</a>
+      <a href="{{ url_for('download_paste', paste_id=paste['id']) }}">Download</a>
+      <a href="{{ url_for('index') }}">New</a>
+    </div>
+  </header>
+  <pre><code id="paste-content" class="language-{{ paste['language'] }}">{{ paste['content'] }}</code></pre>
+</article>
+
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+<script>
+  document.querySelectorAll('pre code').forEach(el => { try { hljs.highlightElement(el); } catch (e) {} });
+  const btn = document.getElementById('copy-btn');
+  btn?.addEventListener('click', async () => {
+    const text = document.getElementById('paste-content').innerText;
+    try {
+      await navigator.clipboard.writeText(text);
+      const old = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = old; }, 1200);
+    } catch (e) {
+      btn.textContent = 'Copy failed';
+    }
+  });
+</script>
+{% endblock %}

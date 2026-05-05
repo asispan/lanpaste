@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="files">
+  <div class="files-head">
+    <h2>Shared files</h2>
+    <div class="files-controls">
+      <label>expiry
+        <select id="file-expiry">
+          {% for opt in expiry_options %}
+          <option value="{{ opt }}" {% if opt == '1d' %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="button" id="pick-files-btn">Choose files</button>
+      <input type="file" id="file-input" multiple hidden>
+    </div>
+  </div>
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-text">
+      <strong>Drop files here</strong>
+      <span>or click "Choose files" — up to 100 MiB each, available to anyone on this LAN</span>
+    </div>
+    <ul id="upload-progress" class="upload-progress"></ul>
+  </div>
+  <ul id="file-list" class="file-list"></ul>
+  <p id="file-empty" class="file-empty muted">No files shared yet.</p>
+</section>
+
+<hr class="divider">
+
+<form method="post" action="{{ url_for('new_paste') }}" class="paste-form">
+  <h2>New paste</h2>
+  <div class="row">
+    <input type="text" name="title" placeholder="Title (optional)" maxlength="200">
+    <select name="language">
+      <option value="plaintext">plaintext</option>
+      <option value="bash">bash</option>
+      <option value="python">python</option>
+      <option value="javascript">javascript</option>
+      <option value="typescript">typescript</option>
+      <option value="json">json</option>
+      <option value="yaml">yaml</option>
+      <option value="html">html</option>
+      <option value="css">css</option>
+      <option value="sql">sql</option>
+      <option value="go">go</option>
+      <option value="rust">rust</option>
+      <option value="c">c</option>
+      <option value="cpp">c++</option>
+      <option value="java">java</option>
+      <option value="ruby">ruby</option>
+      <option value="php">php</option>
+      <option value="markdown">markdown</option>
+      <option value="xml">xml</option>
+      <option value="ini">ini</option>
+      <option value="diff">diff</option>
+    </select>
+    <select name="expiry">
+      {% for opt in expiry_options %}
+      <option value="{{ opt }}" {% if opt == '1d' %}selected{% endif %}>{{ opt }}</option>
+      {% endfor %}
+    </select>
+    <label class="burn">
+      <input type="checkbox" name="burn"> burn after read
+    </label>
+  </div>
+  <textarea name="content" placeholder="Paste your text here..." required></textarea>
+  <div class="actions">
+    <button type="submit">Create paste</button>
+  </div>
+</form>
+
+{% if recent %}
+<section class="recent">
+  <h2>Recent pastes</h2>
+  <ul>
+    {% for r in recent %}
+    <li>
+      <a href="{{ url_for('view_paste', paste_id=r['id']) }}">{{ r['title'] or r['id'] }}</a>
+      <span class="meta">{{ r['language'] }} · {{ r['created_at'][:19].replace('T',' ') }} UTC{% if r['expires_at'] %} · expires {{ r['expires_at'][:19].replace('T',' ') }} UTC{% else %} · no expiry{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<script>
+(() => {
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  const pickBtn = document.getElementById('pick-files-btn');
+  const expirySel = document.getElementById('file-expiry');
+  const list = document.getElementById('file-list');
+  const empty = document.getElementById('file-empty');
+  const progress = document.getElementById('upload-progress');
+
+  pickBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) uploadFiles(fileInput.files);
+    fileInput.value = '';
+  });
+
+  ['dragenter', 'dragover'].forEach(ev =>
+    dropzone.addEventListener(ev, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add('drag-over');
+    })
+  );
+  ['dragleave', 'drop'].forEach(ev =>
+    dropzone.addEventListener(ev, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (ev === 'dragleave' && e.target !== dropzone) return;
+      dropzone.classList.remove('drag-over');
+    })
+  );
+  // Block accidental drops on the rest of the page
+  ['dragover', 'drop'].forEach(ev =>
+    window.addEventListener(ev, e => {
+      if (!dropzone.contains(e.target)) e.preventDefault();
+    })
+  );
+  dropzone.addEventListener('drop', e => {
+    if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+    uploadFiles(e.dataTransfer.files);
+  });
+
+  function uploadFiles(files) {
+    Array.from(files).forEach(f => uploadOne(f));
+  }
+
+  function uploadOne(file) {
+    const li = document.createElement('li');
+    li.className = 'upload-item';
+    li.innerHTML = `<span class="up-name"></span><span class="up-bar"><span class="up-fill"></span></span><span class="up-pct">0%</span>`;
+    li.querySelector('.up-name').textContent = file.name;
+    progress.appendChild(li);
+    const fill = li.querySelector('.up-fill');
+    const pct = li.querySelector('.up-pct');
+
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('expiry', expirySel.value);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/files');
+    xhr.upload.addEventListener('progress', e => {
+      if (!e.lengthComputable) return;
+      const p = Math.round((e.loaded / e.total) * 100);
+      fill.style.width = p + '%';
+      pct.textContent = p + '%';
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        li.classList.add('done');
+        pct.textContent = 'done';
+        setTimeout(() => li.remove(), 1500);
+        refreshFiles();
+      } else {
+        li.classList.add('error');
+        let msg = 'failed';
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch (e) {}
+        pct.textContent = msg;
+      }
+    });
+    xhr.addEventListener('error', () => {
+      li.classList.add('error');
+      pct.textContent = 'failed';
+    });
+    xhr.send(fd);
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '';
+    return iso.slice(0, 19).replace('T', ' ') + ' UTC';
+  }
+
+  let lastSig = '';
+  async function refreshFiles() {
+    try {
+      const res = await fetch('/api/files', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const files = data.files || [];
+      const sig = files.map(f => f.id).join(',');
+      if (sig === lastSig) return;
+      lastSig = sig;
+
+      list.innerHTML = '';
+      if (!files.length) {
+        empty.style.display = '';
+        return;
+      }
+      empty.style.display = 'none';
+      for (const f of files) {
+        const li = document.createElement('li');
+        li.className = 'file-item';
+        const expiresPart = f.expires_at
+          ? ` · expires ${fmtTime(f.expires_at)}`
+          : ' · no expiry';
+        li.innerHTML = `
+          <a class="file-name" href="${f.url}" download></a>
+          <span class="file-meta"></span>
+          <button type="button" class="file-del" title="Delete">×</button>
+        `;
+        li.querySelector('.file-name').textContent = f.name;
+        li.querySelector('.file-name').href = f.url;
+        li.querySelector('.file-meta').textContent =
+          `${f.size_human} · ${fmtTime(f.created_at)}${expiresPart}`;
+        li.querySelector('.file-del').addEventListener('click', async () => {
+          if (!confirm(`Delete "${f.name}"?`)) return;
+          await fetch(`/api/files/${f.id}`, { method: 'DELETE' });
+          refreshFiles();
+        });
+        list.appendChild(li);
+      }
+    } catch (e) { /* ignore transient network errors */ }
+  }
+
+  refreshFiles();
+  setInterval(refreshFiles, 2000);
+})();
+</script>
+{% endblock %}

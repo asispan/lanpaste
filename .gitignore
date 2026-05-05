@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Application data (user content — do not publish)
+pastes.db
+pastes.db-journal
+pastes.db-wal
+pastes.db-shm
+uploads/
+logs/
+
+# Tooling / editor
+.claude/
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
